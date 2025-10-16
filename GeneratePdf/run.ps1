@@ -1,35 +1,31 @@
 param($Request, $TriggerMetadata)
 
-Write-Host "🚀 FusionExport Azure Function triggered."
+Write-Host "🚀 FusionExport Function Triggered"
 
-$functionDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$rootDir = Join-Path $functionDir ".."
+$root = $env:HOME
+$batPath = Join-Path $root "site\wwwroot\run.bat"
 
-$batchFile = Join-Path $rootDir "run.bat"
-
-if (!(Test-Path $batchFile)) {
-    Write-Host "❌ run.bat not found"
+if (!(Test-Path $batPath)) {
+    Write-Host "❌ run.bat not found at $batPath"
     return @{
         statusCode = 500
         body = "run.bat not found"
     }
 }
 
-Write-Host "▶ Running FusionExport batch..."
-$process = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batchFile`"" -WorkingDirectory $rootDir -NoNewWindow -Wait -PassThru
+Write-Host "▶ Starting FusionExport batch..."
+Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$batPath`"" -Wait -NoNewWindow
 
-Write-Host "✅ Batch completed with exit code: $($process.ExitCode)"
-
-$outputDir = Join-Path $rootDir "output"
+# Look for latest generated PDF in output folder
+$outputDir = Join-Path $root "site\wwwroot\output"
 if (Test-Path $outputDir) {
-    $latestPdf = Get-ChildItem $outputDir -Filter *.pdf | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    if ($latestPdf) {
-        Write-Host "📄 Found PDF: $($latestPdf.Name)"
-        $pdfBytes = [System.IO.File]::ReadAllBytes($latestPdf.FullName)
+    $latest = Get-ChildItem $outputDir -Filter *.pdf | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if ($latest) {
+        $bytes = [System.IO.File]::ReadAllBytes($latest.FullName)
         return @{
             statusCode = 200
             headers = @{ "Content-Type" = "application/pdf" }
-            body = [Convert]::ToBase64String($pdfBytes)
+            body = [Convert]::ToBase64String($bytes)
             isBase64Encoded = $true
         }
     }
@@ -37,5 +33,5 @@ if (Test-Path $outputDir) {
 
 return @{
     statusCode = 500
-    body = "No PDF generated."
+    body = "No PDF found after export."
 }
