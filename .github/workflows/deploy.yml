@@ -1,4 +1,4 @@
-name: Deploy to Azure Function
+name: FusionExport PDF Generator & Azure Function Deployment
 
 on:
   push:
@@ -10,15 +10,56 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      # 🧩 Step 1: Checkout your repo
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Zip function package
-        run: Compress-Archive -Path * -DestinationPath functionapp.zip
+      # 🧠 Step 2: Debug — list all files that will be deployed
+      - name: List deployment files
+        shell: pwsh
+        run: |
+          Write-Host "📂 Listing all files in the workspace..."
+          Get-ChildItem -Recurse | Select-Object FullName
 
-      - name: Deploy to Azure
+      # 🚀 Step 3: Run FusionExport to generate PDF (optional build/test step)
+      - name: Run FusionExport batch via PowerShell
+        shell: pwsh
+        run: |
+          Write-Host "🚀 Running FusionExport via PowerShell..."
+          & cmd /c run.bat
+
+      # 📤 Step 4: Upload the generated PDF as an artifact
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FusionExportPDF
+          path: output/*.pdf
+
+      # 🔐 Step 5: Login to Azure using the publish profile secret
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+      # 🗜️ Step 6: Package your app (including the batch + exe + chrome)
+      - name: Zip Function App
+        shell: pwsh
+        run: |
+          Write-Host "📦 Creating deployment zip for Azure Function..."
+          Compress-Archive -Path * -DestinationPath functionapp.zip -Force
+          Write-Host "✅ Zip file created: functionapp.zip"
+
+      # ☁️ Step 7: Deploy to Azure Function
+      - name: Deploy to Azure Function
         uses: azure/functions-action@v1
         with:
-          app-name: "YOUR_FUNCTION_APP_NAME"
+          app-name: "fusionexport-function"  # 🔹 replace this
           package: "functionapp.zip"
-          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+
+      # 🧠 Step 8: Confirm deployment contents (optional final verification)
+      - name: Verify zip contents
+        shell: pwsh
+        run: |
+          Write-Host "🧐 Verifying contents of the zip..."
+          Expand-Archive -Path functionapp.zip -DestinationPath temp_extract -Force
+          Get-ChildItem -Recurse temp_extract | Select-Object FullName
